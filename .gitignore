@@ -1,0 +1,5 @@
+*.Rproj*
+*.Rbuildignore
+.RData
+.Rhistory
+gurobi.log
