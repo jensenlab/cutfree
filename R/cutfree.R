@@ -72,14 +72,78 @@ print_oligo_block <- function(oligo) {
   cat(paste(make_oligo_block(oligo), collapse="\n"))
 }
 
-make_random_oligo <- function(m=20, rs="GGTCTC", codes=IUB_CODES) {
-  k <- nchar(rs)
-  nB <- length(codes)
-  ncons <- 2*m - k + 1
-  A <- matrix(0, nrow=ncons, ncol=nB*m, dimnames=list(NULL, paste0(names(codes), rep(1:m, each=nB))))
-  rhs <- rep(0, ncons)
+`%<in>%` <- function(x,y) all(x %in% y) & all(y %in% x)
+which_name <- function(tf) names(tf)[which(tf)]
 
-  sense <- c(rep("=", m), rep(">", m-k+1))
+subcodes <- function(code, codes=IUB_CODES) {
+  which_name(sapply(codes, function(x) all(x %in% codes[[code]])))
+}
+
+complement <- function(strings, codes=IUB_CODES) {
+  base_comps <- c(A="T", C="G", G="C", T="A")
+  complemented <- lapply(codes, function(x) unname(base_comps[x]))
+  comp_codes <- sapply(codes, function(x) "")
+  for (code in names(comp_codes)) {
+    comp_codes[code] <- which_name(sapply(codes, `%<in>%`, complemented[[code]]))
+  }
+  # comp_codes now contains the complement code for each code in codes
+  # For IUB_CODES:
+  #   A   C   G   T   R   Y   M   K   S   W   H   B   V   D   N
+  #  "T" "G" "C" "A" "Y" "R" "K" "M" "S" "W" "D" "V" "B" "H" "N"
+
+  chartr(paste(names(comp_codes), collapse=""),
+         paste(comp_codes, collapse=""),
+         strings)
+}
+
+reverse <- function(strings) {
+  sapply(lapply(strsplit(strings, NULL), rev), paste, collapse="")
+}
+
+reverse_complement <- function(strings) reverse(complement(strings))
+
+expand_asymmetric <- function(sites) {
+  unique(c(sites, reverse_complement(sites)))
+}
+
+str2char <- function(x) strsplit(x, NULL)[[1]]
+char2str <- function(x) paste(x, collapse="")
+
+degeneracy <- function(sequence, codes=IUB_CODES) {
+  dups <- vapply(codes, length, 0)
+  sapply(sequence, function(x) prod(dups[str2char(x)]))
+}
+
+randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
+                            starting_oligo=strrep("N",m),
+                            min_blocks=1,
+                            obj_weights=c(1,2,3,4)) {
+  sites <- expand_asymmetric(sites)  # include both strands if asymmetric
+  ks <- sapply(sites, nchar)  # length of each site
+  nB <- length(codes)  # number of variables for position in randomer
+  starting_oligo <- str2char(starting_oligo)
+  m <- length(starting_oligo)  # number of positions in randomer
+
+  ncons <- m + sum(m - ks + 1)
+  nvars <- nB * m
+  idx <- function(b,i) nB*(i-1) + which(names(codes) == b)
+
+  A <- matrix(0, nrow=ncons, ncol=nvars,
+              dimnames=list(NULL,
+                            paste0(names(codes), rep(1:m, each=nB))))
+  rhs = rep(0, ncons)
+  sense <- rep(">", ncons)
+  sense[1:m] <- "="
+  lb = numeric(nvars)
+  ub = numeric(nvars)
+
+  # open up only codes allowed by the starting oligo
+  for (i in 1:m) {
+    subs <- subcodes(starting_oligo[i])
+    for (b in subs) {
+      ub[idx(b,i)] <- 1
+    }
+  }
 
   # allow only a single code per location
   for (i in 1:m) {
@@ -88,20 +152,23 @@ make_random_oligo <- function(m=20, rs="GGTCTC", codes=IUB_CODES) {
   }
 
   # add constraints to remove the RS
-  idx <- function(b,i) nB*(i-1) + which(names(codes) == b)
-  rs <- str_to_vector(rs)
-  for (j in 1:(m-k+1)) {
-    for (i in 1:k) {
-      blocked <- get_blocking_codes(rs[i], names=TRUE)
-      for (b in blocked) {
-        A[m+j,idx(b,i+j-1)] <- 1
+  curr_row <- m + 1
+  for (s in seq_along(sites)) {
+    rs <- str2char(sites[s])
+    for (j in 1:(m-ks[s]+1)) {
+      for (i in 1:ks[s]) {
+        blocked <- get_blocking_codes(rs[i], names=TRUE)
+        for (b in blocked) {
+          A[curr_row,idx(b,i+j-1)] <- 1
+        }
       }
+      rhs[curr_row] <- min_blocks
+      curr_row <- curr_row + 1
     }
-    rhs[m+j] <- 1
   }
 
   # define the objective
-  codelens <- vapply(codes, length, 0)
+  codelens <- obj_weights[vapply(codes, length, 0)]
   obj <- rep(codelens, m)
 
   model <- list(
@@ -109,15 +176,20 @@ make_random_oligo <- function(m=20, rs="GGTCTC", codes=IUB_CODES) {
     obj = obj,
     modelsense = "max",
     rhs = rhs,
+    lb = lb,
+    ub = ub,
     sense = sense,
     vtype = "B"
   )
   params <- list(OutputFlag=1)
 
   result <- gurobi::gurobi(model, params)
-  code <- rep(names(codes),m)[result$x == 1]
+  code <- paste(rep(names(codes),m)[result$x == 1], collapse="")
   return(list(code = code,
               model = model))
 }
 
-result <- make_random_oligo()
+#result <- make_random_oligo()
+result <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
+result2 <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2, obj_weights=c(0,2,3,4))
+
