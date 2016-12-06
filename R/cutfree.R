@@ -17,6 +17,10 @@ IUB_CODES <- list(
   N = c("A", "C", "G", "T")
 )
 
+printf <- function(fmt, ...) {
+  cat(sprintf(fmt, ...))
+}
+
 # Find codes that do not contain a code.
 # Example: if code is A, then blocking codes are
 #   C,G,T,Y,K,S,B (all codes without A)
@@ -117,7 +121,7 @@ degeneracy <- function(sequence, codes=IUB_CODES) {
 randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
                             starting_oligo=strrep("N",m),
                             min_blocks=1,
-                            obj_weights=c(1,2,3,4)) {
+                            obj_weights=c(0,2,3,4)) {
   sites <- expand_asymmetric(sites)  # include both strands if asymmetric
   ks <- sapply(sites, nchar)  # length of each site
   nB <- length(codes)  # number of variables for position in randomer
@@ -189,7 +193,80 @@ randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
               model = model))
 }
 
-#result <- make_random_oligo()
-result <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
-result2 <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2, obj_weights=c(0,2,3,4))
+create_barcodes <- function(randomer, n=100, min_distance=5,
+                            file=NULL, codes=IUB_CODES,
+                            seed=NULL) {
+  randomer <- str2char(randomer)
+  m <- length(randomer)
 
+  nvars <- 4*m
+  ncons <- m + n
+  nuc_names <- c("A", "C", "G", "T")
+  idx <- function(b,i) 4*(i-1) + which(nuc_names == b)
+
+  model = list(
+    modelsense = "max",
+    vtype = "B"
+  )
+  model$A <- matrix(0, nrow=ncons, ncol=nvars,
+                    dimnames=list(NULL,
+                                  paste0(nuc_names, rep(1:m, each=4))))
+  model$rhs = rep(0, ncons)
+  model$rhs[1:m] <- 1
+  model$sense <- rep("=", ncons)
+  model$lb = numeric(nvars)
+  model$ub = numeric(nvars)
+
+  # open up only codes allowed by the starting oligo
+  for (i in 1:m) {
+    allowed <- codes[randomer[i]]
+    for (b in allowed) {
+      model$ub[idx(b,i)] <- 1
+    }
+  }
+
+  # allow only a single code per location
+  for (i in 1:m) {
+    model$A[i,(4*(i-1)+1):(4*i)] <- 1
+  }
+
+  barcodes <- as.character(rep(NA, n))
+
+  params <- list(OutputFlag=0)
+  set.seed(seed)
+  for (i in 1:n) {
+    model$obj <- runif(nvars)
+    elapsed <- system.time(
+      result <- gurobi::gurobi(model, params),
+      gcFirst = FALSE
+    )
+    if (result$status != "OPTIMAL") {
+      printf("   No additional barcodes possible.\n")
+      return(barcodes)
+    }
+    barcodes[i] <- paste(rep(nuc_names,m)[result$x == 1], collapse="")
+
+    printf("   Found barcode %i (%s) in %f seconds.\n", i, barcodes[i], elapsed[3])
+
+    if (i < n) {
+      # add existing barcode as constraint
+      model$A[m+i, ] <- result$x
+      model$sense[m+i] <- "<"
+      model$rhs[m+i] <- m - min_distance
+    }
+  }
+  return(barcodes)
+}
+
+#result <- make_random_oligo()
+#result <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
+#result2 <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2, obj_weights=c(0,2,3,4))
+
+#bcs <- create_barcodes("NNNNNNN", min_distance=3, n=100)
+
+# GTAC study
+GTAC_oligo <- "SWWSWWSWWSWWSWWSWWS"
+gtac_res <- randomize_oligo(starting_oligo=GTAC_oligo, sites="GTAC", min_blocks=2)
+
+AATT_oligo <- "HDHDHDHDHDHDHDHDHDHDHDH"
+aatt_res <- randomize_oligo(starting_oligo=AATT_oligo, sites="AATT", min_blocks=1)
