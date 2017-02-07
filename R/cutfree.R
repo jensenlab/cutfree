@@ -121,7 +121,12 @@ degeneracy <- function(sequence, codes=IUB_CODES) {
 randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
                             starting_oligo=strrep("N",m),
                             min_blocks=1,
-                            obj_weights=c(0,2,3,4)) {
+                            obj_weights=log(1:4),
+                            re_randomize=TRUE,
+                            seed=NULL,
+                            obj_frac=1.0,
+                            quiet=FALSE,
+                            maxtime=30) {
   sites <- expand_asymmetric(sites)  # include both strands if asymmetric
   ks <- sapply(sites, nchar)  # length of each site
   nB <- length(codes)  # number of variables for position in randomer
@@ -185,12 +190,27 @@ randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
     sense = sense,
     vtype = "B"
   )
-  params <- list(OutputFlag=1)
+  params <- list(OutputFlag=as.integer(!quiet))
 
-  result <- gurobi::gurobi(model, params)
-  code <- paste(rep(names(codes),m)[result$x == 1], collapse="")
+  times <- system.time(
+    result <- gurobi::gurobi(model, params)
+  )
+
+  if (re_randomize && result$status == "OPTIMAL") {
+    model2 <- add_objective_constraint(model, result, frac=obj_frac)
+    set.seed(seed)
+    model2$obj <- runif(length(model2$obj))
+    result <- gurobi::gurobi(model2, params)
+  }
+
+  if (result$status == "OPTIMAL")
+    code <- paste(rep(names(codes),m)[result$x[1:nvars] == 1], collapse="")
+  else
+    code <- NA
+
   return(list(code = code,
-              model = model))
+              model = model,
+              time = times))
 }
 
 create_barcodes <- function(randomer, n=100, min_distance=5,
@@ -235,7 +255,7 @@ create_barcodes <- function(randomer, n=100, min_distance=5,
   params <- list(OutputFlag=0)
   set.seed(seed)
   for (i in 1:n) {
-    model$obj <- runif(nvars)
+    model$obj <- runif(nvars) - 0.5
     elapsed <- system.time(
       result <- gurobi::gurobi(model, params),
       gcFirst = FALSE
@@ -259,14 +279,15 @@ create_barcodes <- function(randomer, n=100, min_distance=5,
 }
 
 #result <- make_random_oligo()
-#result <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
+# result <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
 #result2 <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2, obj_weights=c(0,2,3,4))
 
 #bcs <- create_barcodes("NNNNNNN", min_distance=3, n=100)
 
 # GTAC study
-GTAC_oligo <- "SWWSWWSWWSWWSWWSWWS"
-gtac_res <- randomize_oligo(starting_oligo=GTAC_oligo, sites="GTAC", min_blocks=2)
+#GTAC_oligo <- "SWWSWWSWWSWWSWWSWWS"
+#gtac_res <- randomize_oligo(starting_oligo=GTAC_oligo, sites="GTAC", min_blocks=2)
 
-AATT_oligo <- "HDHDHDHDHDHDHDHDHDHDHDH"
-aatt_res <- randomize_oligo(starting_oligo=AATT_oligo, sites="AATT", min_blocks=1)
+#AATT_oligo <- "HDHDHDHDHDHDHDHDHDHDHDH"
+#aatt_res  <- randomize_oligo(starting_oligo=AATT_oligo, sites="AATT", min_blocks=1, obj_frac=0.9)
+#aatt_res2 <- randomize_oligo(starting_oligo=AATT_oligo, sites="AATT", min_blocks=2, obj_frac=0.9)
