@@ -71,9 +71,9 @@ make_oligo_block <- function(oligo, codes=IUB_CODES) {
 #   -C---CC-C-CCC-C
 #   --G-G--GG--GGGG
 #   ---T-T-T-TTT-TT
-print_oligo_block <- function(oligo) {
-  cat(paste(oligo, collapse=""), "\n")
-  cat(paste(make_oligo_block(oligo), collapse="\n"))
+print_oligo_block <- function(oligo, indent="") {
+  cat(paste0(indent, oligo, collapse=""), "\n")
+  cat(paste0(indent, make_oligo_block(oligo), collapse="\n"))
 }
 
 `%<in>%` <- function(x,y) all(x %in% y) & all(y %in% x)
@@ -118,15 +118,15 @@ degeneracy <- function(sequence, codes=IUB_CODES) {
   sapply(sequence, function(x) prod(dups[str2char(x)]))
 }
 
-randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
-                            starting_oligo=strrep("N",m),
-                            min_blocks=1,
-                            obj_weights=log(1:4),
-                            re_randomize=TRUE,
-                            seed=NULL,
-                            obj_frac=1.0,
-                            quiet=FALSE,
-                            maxtime=30) {
+cutfree <- function(m=20, sites=c(), codes=IUB_CODES,
+                    starting_oligo=strrep("N",m),
+                    min_blocks=1,
+                    obj_weights=log(1:4),
+                    re_randomize=TRUE,
+                    seed=NULL,
+                    obj_frac=1.0,
+                    quiet=FALSE,
+                    maxtime=30) {
   sites <- expand_asymmetric(sites)  # include both strands if asymmetric
   ks <- sapply(sites, nchar)  # length of each site
   nB <- length(codes)  # number of variables for position in randomer
@@ -193,14 +193,16 @@ randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
   params <- list(OutputFlag=as.integer(!quiet))
 
   times <- system.time(
-    result <- gurobi::gurobi(model, params)
+    orig_result <- gurobi::gurobi(model, params)
   )
 
-  if (re_randomize && result$status == "OPTIMAL") {
-    model2 <- add_objective_constraint(model, result, frac=obj_frac)
+  if (re_randomize && orig_result$status == "OPTIMAL") {
+    model2 <- add_objective_constraint(model, orig_result, frac=obj_frac)
     set.seed(seed)
     model2$obj <- runif(length(model2$obj))
     result <- gurobi::gurobi(model2, params)
+  } else {
+    result <- orig_result
   }
 
   if (result$status == "OPTIMAL")
@@ -210,7 +212,9 @@ randomize_oligo <- function(m=20, sites=c(), codes=IUB_CODES,
 
   return(list(code = code,
               model = model,
-              time = times))
+              time = times,
+              sol_orig = orig_result,
+              sol_final = result))
 }
 
 create_barcodes <- function(randomer, n=100, min_distance=5,
@@ -278,16 +282,6 @@ create_barcodes <- function(randomer, n=100, min_distance=5,
   return(barcodes)
 }
 
-#result <- make_random_oligo()
-# result <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
-#result2 <- randomize_oligo(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2, obj_weights=c(0,2,3,4))
 
-#bcs <- create_barcodes("NNNNNNN", min_distance=3, n=100)
-
-# GTAC study
-#GTAC_oligo <- "SWWSWWSWWSWWSWWSWWS"
-#gtac_res <- randomize_oligo(starting_oligo=GTAC_oligo, sites="GTAC", min_blocks=2)
-
-#AATT_oligo <- "HDHDHDHDHDHDHDHDHDHDHDH"
-#aatt_res  <- randomize_oligo(starting_oligo=AATT_oligo, sites="AATT", min_blocks=1, obj_frac=0.9)
-#aatt_res2 <- randomize_oligo(starting_oligo=AATT_oligo, sites="AATT", min_blocks=2, obj_frac=0.9)
+# result <- cutfree(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
+# bcs <- create_barcodes("NNNNNNN", min_distance=3, n=100)

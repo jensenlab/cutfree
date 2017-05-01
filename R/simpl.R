@@ -14,3 +14,18 @@ add_objective_constraint <- function(model, result, frac=1.0, clear_obj=TRUE) {
 
   return(model)
 }
+
+test_gurobi <- function() {
+  model <- list()
+
+  model$A          <- matrix(c(1,2,3,1,1,0), nrow=2, ncol=3, byrow=T)
+  model$obj        <- c(1,1,2)
+  model$modelsense <- "max"
+  model$rhs        <- c(4,1)
+  model$sense      <- c('<', '>')
+  model$vtype      <- 'B'
+
+  params <- list(OutputFlag=1)
+
+  result <- gurobi::gurobi(model, params)
+}

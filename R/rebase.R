@@ -1,8 +1,6 @@
 
-library(magrittr)
-library(ggplot2)
 
-load_rebase <- function(file="data/itype2.txt") {
+load_rebase <- function(file="data-raw/itype2.txt") {
   rebase <- readr::read_delim(file, delim="\t", skip=10,
                               col_names = c("enzyme", "prototype", "sequence",
                                             "methylation_site", "commercial_source", "references"),
@@ -14,8 +12,6 @@ load_rebase <- function(file="data/itype2.txt") {
 
   return(rebase)
 }
-
-rebase <- load_rebase()
 
 simulate_length <- function(rebase, nsites=1, nreps=10, lengths=c(20,40,60,80,100), timer="elapsed") {
   results <- dplyr::tibble(
@@ -62,43 +58,50 @@ simulate_sites <- function(rebase, nsites=1:5, nreps=20, oligo_length=20, timer=
   return(results)
 }
 
-rebase_pal_com <- rebase %>%
-  dplyr::filter(!is.na(commercial_source),
-                is_palindrome,
-                length==6,
-                is_ACTG) %>%
-  dplyr::filter(!duplicated(base_sequence))
+run_cutree_paper <- function() {
+  rebase <- load_rebase()
 
-results <- simulate_sites(rebase_pal_com)
-results_lengths <- simulate_length(rebase_pal_com)
+  rebase_pal_com <- rebase %>%
+    dplyr::filter(!is.na(commercial_source),
+                  is_palindrome,
+                  length==6,
+                  is_ACTG) %>%
+    dplyr::filter(!duplicated(base_sequence))
 
-theme_white <- theme_bw() + theme(panel.grid.major = element_blank(),
-                                  panel.grid.minor = element_blank())
+  results <- simulate_sites(rebase_pal_com)
+  results_lengths <- simulate_length(rebase_pal_com)
 
-plot1 <- ggplot(results, aes(x=n_sites, y=time)) +
-    scale_y_log10() +
-    geom_point() +
-    xlab("Blocked Sites") +
-    ylab("Runtime [s]") +
-    geom_smooth(method="lm", se=FALSE)
+  theme_white <- theme_bw() + theme(panel.grid.major = element_blank(),
+                                    panel.grid.minor = element_blank())
 
-plot2 <- ggplot(results, aes(x=n_sites, y=degeneracy)) +
-    scale_y_log10() +
-    geom_point() +
-    xlab("Blocked Sites") +
-    ylab("Possible Sequences") +
-    geom_smooth(method="lm", se=FALSE)
+  plot1 <- ggplot2::ggplot(results, aes(x=n_sites, y=time)) +
+    ggplot2::scale_y_log10() +
+    ggplot2::geom_point() +
+    ggplot2::xlab("Blocked Sites") +
+    ggplot2::ylab("Runtime [s]") +
+    ggplot2::geom_smooth(method="lm", se=FALSE)
 
-plot0 <- ggplot(results_lengths, aes(x=oligo_lengths, y=time)) +
-    scale_y_log10() +
-    geom_point() +
-    xlab("Randomer Length [bp]") +
-    ylab("Runtime [s]") +
-    geom_smooth(method="lm", se=FALSE)
+  plot2 <- ggplot2::ggplot(results, aes(x=n_sites, y=degeneracy)) +
+    ggplot2::scale_y_log10() +
+    ggplot2::geom_point() +
+    ggplot2::xlab("Blocked Sites") +
+    ggplot2::ylab("Possible Sequences") +
+    ggplot2::geom_smooth(method="lm", se=FALSE)
 
-#pdf("figure3a.pdf", 3.0, 2.5)
-#print(plot1)
-#dev.off()
+  plot0 <- ggplot2::ggplot(results_lengths, aes(x=oligo_lengths, y=time)) +
+    ggplot2::scale_y_log10() +
+    ggplot2::geom_point() +
+    ggplot2::xlab("Randomer Length [bp]") +
+    ggplot2::ylab("Runtime [s]") +
+    ggplot2::geom_smooth(method="lm", se=FALSE)
 
-cowplot::plot_grid(plot1, plot2, plot0, labels=c("A","B","C"), align="h")
+  results %>%
+    dplyr::group_by(n_sites) %>%
+    dplyr::select(n_sites, time, degeneracy) %>%
+    dplyr::summarise_all(dplyr::funs(mean, sd))
+
+  cowplot::plot_grid(plot1, plot2, plot0, labels=c("A","B","C"), align="h")
+}
+
+
 
