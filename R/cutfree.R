@@ -1,4 +1,6 @@
 
+#' IUB codes used by CutFree
+#' @export
 IUB_CODES <- list(
   A = c("A"),
   C = c("C"),
@@ -45,12 +47,22 @@ str_to_vector <- function(str) {
   }
 }
 
-# Create a text block showing which bases are allowed
-# by the oligo. Returns four strings denoting the presence
-# of each base.
-# Example: make_oligo_block("ACGTRYMKSWHBVDN")
-#                 A                 C                 G                 T
-# "A---A-A--AA-AAA" "-C---CC-C-CCC-C" "--G-G--GG--GGGG" "---T-T-T-TTT-TT"
+#' Text summary of degenerate oligos
+#'
+#' Create textual representations of an oligo describing the base content at
+#' each position.
+#'
+#' \code{make_oligo_block} creates a text block showing which bases are allowed
+#' by the oligo. It returns four strings denoting the presence
+#' of each base.
+#'
+#' \code{print_oligo_block} prints the output of
+#' \code{make_oligo_block} plus the oligo.
+#'
+#' @examples
+#' make_oligo_block("ACGTRYMKSWHBVDN")
+#'
+#' @export
 make_oligo_block <- function(oligo, codes=IUB_CODES) {
   oligo <- str_to_vector(oligo)
 
@@ -63,14 +75,12 @@ make_oligo_block <- function(oligo, codes=IUB_CODES) {
   return(strs)
 }
 
-# Show an oligo followed by the allowed bases
-# (from make_oligo_block).
-# Example: print_oligo_block("ACGTRYMKSWHBVDN")
-#   ACGTRYMKSWHBVDN
-#   A---A-A--AA-AAA
-#   -C---CC-C-CCC-C
-#   --G-G--GG--GGGG
-#   ---T-T-T-TTT-TT
+#' @rdname make_oligo_block
+#'
+#' @examples
+#' print_oligo_block("ACGTRYMKSWHBVDN")
+#'
+#' @export
 print_oligo_block <- function(oligo, indent="") {
   cat(paste0(indent, oligo, collapse=""), "\n")
   cat(paste0(indent, make_oligo_block(oligo), collapse="\n"))
@@ -83,6 +93,11 @@ subcodes <- function(code, codes=IUB_CODES) {
   which_name(sapply(codes, function(x) all(x %in% codes[[code]])))
 }
 
+#' Reversing and complementing degenerate oligos
+#'
+#' @describeIn complement Complement degenerate oligos
+#'
+#' @export
 complement <- function(strings, codes=IUB_CODES) {
   base_comps <- c(A="T", C="G", G="C", T="A")
   complemented <- lapply(codes, function(x) unname(base_comps[x]))
@@ -100,11 +115,17 @@ complement <- function(strings, codes=IUB_CODES) {
          strings)
 }
 
+#' @describeIn complement Reverse a degenerate oligo
+#'
+#' @export
 reverse <- function(strings) {
   sapply(lapply(strsplit(strings, NULL), rev), paste, collapse="")
 }
 
-reverse_complement <- function(strings) reverse(complement(strings))
+#' @describeIn complement Reverse complement of a degenerate oligo
+#'
+#' @export
+reverse_complement <- function(strings, codes=IUB_CODES) reverse(complement(strings, codes=codes))
 
 expand_asymmetric <- function(sites) {
   unique(c(sites, reverse_complement(sites)))
@@ -113,13 +134,49 @@ expand_asymmetric <- function(sites) {
 str2char <- function(x) strsplit(x, NULL)[[1]]
 char2str <- function(x) paste(x, collapse="")
 
+#' Calculate number of sequences in a degerate oligo
+#'
+#' @export
 degeneracy <- function(sequence, codes=IUB_CODES) {
   dups <- vapply(codes, length, 0)
   sapply(sequence, function(x) prod(dups[str2char(x)]))
 }
 
-cutfree <- function(m=20, sites=c(), codes=IUB_CODES,
-                    starting_oligo=strrep("N",m),
+#' Design degenerate oligos free of restriction sites
+#'
+#' Design pools of DNA oligos that are guaranteed to not
+#' contain specified restriction enzyme cut sites. All cut
+#' sites are blocked while ensuring the optimal number of oligos
+#' remain in the pool.
+#'
+#' @param len Length of the random oligo. Must be provided if
+#' \code{starting_oligo} is not given.
+#' @param sites Character vector of restriction sites to block.
+#' @param starting_oligo Starting oligo from which sites will be
+#' removed. If not given, defaults to a string of N's.
+#' @param min_blocks Minimum number of blocks at each site, i.e.
+#' the minimum number of changes that need to be made for a cut
+#' site to appear anywhere in the oligo.
+#' @param obj_weights Objective function weights for each code's
+#' degeneracy.
+#' @param re_randomize If \code{TRUE} (default), re-run the optimization
+#' to randomize the codes while maintaining the same number of oligos.
+#' @param obj_frac Fraction of the objective function that must be
+#' maintained during re-randomization.
+#' @param seed Seed for the random number generator.
+#' @param quiet Run silently with no output from Gurobi.
+#' @param maxtime Maximum time (in seconds) allowed for the solver.
+#'
+#' @return A list containing \code{code} -- the randomize oligo, and a
+#' fields describing the MILP and the solution statistics.
+#'
+#' @examples
+#' result <- cutfree(m=20, sites=c("GGTCTC", "GATATC"), min_blocks=2)
+#' print_degenerate_oligo(result$code)
+#'
+#' @export
+cutfree <- function(len=20, sites=c(), codes=IUB_CODES,
+                    starting_oligo=strrep("N",len),
                     min_blocks=1,
                     obj_weights=log(1:4),
                     re_randomize=TRUE,
@@ -127,6 +184,7 @@ cutfree <- function(m=20, sites=c(), codes=IUB_CODES,
                     obj_frac=1.0,
                     quiet=FALSE,
                     maxtime=30) {
+  m <- len
   sites <- expand_asymmetric(sites)  # include both strands if asymmetric
   ks <- sapply(sites, nchar)  # length of each site
   nB <- length(codes)  # number of variables for position in randomer
