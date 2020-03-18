@@ -248,13 +248,16 @@ cutfree <- function(len=20, sites=c(), codes=IUB_CODES,
     sense = sense,
     vtype = "B"
   )
-  params <- list(OutputFlag=as.integer(!quiet))
+  params <- list(
+    OutputFlag=as.integer(!quiet),
+    TimeLimit=maxtime
+  )
 
   times <- system.time(
     orig_result <- gurobi::gurobi(model, params)
   )
 
-  if (re_randomize && orig_result$status == "OPTIMAL") {
+  if (re_randomize && orig_result$status %in% c("OPTIMAL", "TIME_LIMIT")) {
     model2 <- add_objective_constraint(model, orig_result, frac=obj_frac)
     set.seed(seed)
     model2$obj <- runif(length(model2$obj))
@@ -263,7 +266,7 @@ cutfree <- function(len=20, sites=c(), codes=IUB_CODES,
     result <- orig_result
   }
 
-  if (result$status == "OPTIMAL")
+  if (result$status %in% c("OPTIMAL", "TIME_LIMIT"))
     code <- paste(rep(names(codes),m)[result$x[1:nvars] == 1], collapse="")
   else
     code <- NA
@@ -338,6 +341,25 @@ create_barcodes <- function(randomer, n=100, min_distance=5,
     }
   }
   return(barcodes)
+}
+
+#' @export
+find_match <- function(query, subject, codes=IUB_CODES) {
+  query_bases <- codes[str_to_vector(query)]
+  subject_bases <- codes[str_to_vector(subject)]
+  nq <- length(query_bases)
+  ns <- length(subject_bases)
+  nm <- ns - nq + 1  # number of match positions to try
+  is_match <- !logical(nm)
+  for (i in 1:nm) {
+    for (j in 1:nq) {
+      if (!any(query_bases[[j]] %in% subject_bases[[i+j-1]])) {
+        is_match[i] <- FALSE
+        break
+      }
+    }
+  }
+  return(which(is_match))
 }
 
 

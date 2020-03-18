@@ -15,6 +15,9 @@ add_objective_constraint <- function(model, result, frac=1.0, clear_obj=TRUE) {
   return(model)
 }
 
+#' Test the Gurobi MILP solver
+#'
+#' @export
 test_gurobi <- function() {
   model <- list()
 
