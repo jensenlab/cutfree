@@ -5,13 +5,14 @@ Version: 0.1.0
 Author: Paul Jensen
 Maintainer: Jensen Lab <manager@jensenlab.net>
 Description: Design pools of random DNA barcodes
-  that do not contain restriction enzyme cut sites.
+    that do not contain restriction enzyme cut sites.
 License: MIT
 LazyData: TRUE
 Imports:
-  gurobi,
-  magrittr
+    gurobi,
+    magrittr
 Suggests:
-  ggplot2,
-  dplyr,
-  cowplot
+    ggplot2,
+    dplyr,
+    cowplot
+RoxygenNote: 5.0.1

@@ -23,11 +23,11 @@ simulate_length <- function(rebase, nsites=1, nreps=10, lengths=c(20,40,60,80,10
   )
 
   for (i in 1:nrow(results)) {
-    solution <- randomize_oligo(m=results$oligo_lengths[i],
-                                sites=results$sites[[i]],
-                                min_blocks=1,
-                                re_randomize=FALSE,
-                                quiet=TRUE)
+    solution <- cutfree(m=results$oligo_lengths[i],
+                        sites=results$sites[[i]],
+                        min_blocks=1,
+                        re_randomize=FALSE,
+                        quiet=TRUE)
     results$time[i] <- solution$time[timer]
     print(results$oligo_lengths[i])
   }
@@ -45,11 +45,11 @@ simulate_sites <- function(rebase, nsites=1:5, nreps=20, oligo_length=20, timer=
   )
 
   for (i in 1:nrow(results)) {
-    solution <- randomize_oligo(m=oligo_length,
-                                sites=results$sites[[i]],
-                                min_blocks=1,
-                                re_randomize=FALSE,
-                                quiet=TRUE)
+    solution <- cutfree(m=oligo_length,
+                        sites=results$sites[[i]],
+                        min_blocks=1,
+                        re_randomize=FALSE,
+                        quiet=TRUE)
     results$time[i] <- solution$time[timer]
     if (!is.na(solution$code))
       results$degeneracy[i] <- degeneracy(solution$code)
